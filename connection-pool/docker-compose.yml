@@ -1,0 +1,61 @@
+services:
+  db:
+    image: mariadb:10.6
+    container_name: db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: sampledb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+    networks:
+      - appnet
+
+  proxysql:
+    image: proxysql/proxysql
+    container_name: proxysql
+    ports:
+      - "6033:6033" # MySQL client port
+      - "6032:6032" # Admin interface
+    volumes:
+      - ./proxysql/init.sql:/init.sql
+    networks:
+      - appnet
+    depends_on:
+      - db
+    command: >
+      sh -c "
+        proxysql --initial &&
+        sleep 10 &&
+        mysql -uadmin -padmin -h127.0.0.1 -P6032 < /init.sql &&
+        tail -f /dev/null
+      "
+
+  node-direct:
+    container_name: node-direct
+    build:
+      context: ./node-direct
+    depends_on:
+      - db
+    ports:
+      - "3001:3000"
+    networks:
+      - appnet
+
+  node-proxysql:
+    container_name: node-proxysql
+    build:
+      context: ./node-proxysql
+    depends_on:
+      - proxysql
+    ports:
+      - "3002:3000"
+    networks:
+      - appnet
+
+networks:
+  appnet:
+    driver: bridge
